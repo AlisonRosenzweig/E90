@@ -1,7 +1,8 @@
 import myro
-import svg.path as svg  
+import svg
 import numpy as np
 # parse_path will be useful 
+import svgpathtools
 
 DIST_PER_SEC = 2.95 # inches when moving at half speed
 # TODO: further refine this value
@@ -10,14 +11,18 @@ ANGLE_PER_SEC = 23 # in degrees, assumes turning at 1/4 max
 # TODO: this isn't very consistent, so should replace with sensor input
 
 class Canvas:
-  def __init__(self, height, svg=None):
+  def __init__(self, svg_file, height=None):
     # assume robot is initially in the bottom left corner of the canvas (0, 0)
     # and is facing up (in the positive y direction)
-    self.svg = svg
-    self.height = height
-    # TODO: calculate the width based on the height and the ratio in the svg
+    if height:
+      self.height = float(height)
+    else:
+      self.height = None # in this case, will be set by load_svg
+    self.width = None # will be set by load_svg
     self.width = height 
-
+    self.segs = None # will be set by load_svg
+    
+    self.load_svg(svg_file)
 
   def robot_in_bounds(self, robot):
     if robot.pos_x > self.width or robot.pos_x < 0:
@@ -25,7 +30,44 @@ class Canvas:
     if robot.pos_y > self.height or robot.pos_y < 0:
       return False
     return True
+  
+  def load_svg(self, svg_file):
+    # Read in the svg file 
+    paths, _, svg_attributes = svgpathtools.svg2paths2(svg_file)
 
+    # Get the height and width of the SVG
+    height = float(svg_attributes["height"])
+    width = float(svg_attributes["width"])
+
+    if self.height:
+      scaling_factor = self.height/height
+    else:
+      self.height = height
+      scaling_factor = 1.0
+    
+    self.width = scaling_factor*width
+
+    line_segs = self.translate_svg_paths(paths, scaling_factor)
+    self.segs = line_segs
+
+  def translate_svg_paths(self, paths, scale):
+    line_segs = []
+    for path in paths: 
+      for seg in path:
+        if isinstance(seg, svgpathtools.Line):
+          start = (scale*np.real(seg.start), scale*np.imag(seg.start))
+          end = (scale*np.real(seg.end), scale*np.imag(seg.end))
+          line_segs.append([start, end])
+        else:
+          # for now do the same thing as above, but will want to handle
+          # each case differently in the future by checking for these classes: 
+          # svgpathtools.QuadraticBezier, svgpathtools.CubicBezier, 
+          # svgpathtools.Arc
+          print("Got a more complex segment! Skipping it for now", seg)
+    return line_segs
+    
+    
+    
 
 class Robot:
   def __init__(self, myro_obj=None):
