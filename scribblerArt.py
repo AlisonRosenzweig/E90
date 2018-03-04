@@ -47,27 +47,51 @@ class Canvas:
     
     self.width = scaling_factor*width
 
-    line_segs = self.translate_svg_paths(paths, scaling_factor)
-    self.segs = line_segs
+    robot_paths = translate_svg_paths(paths, scaling_factor)
+    self.paths = robot_paths
 
-  def translate_svg_paths(self, paths, scale):
-    line_segs = []
-    for path in paths: 
-      for seg in path:
-        if isinstance(seg, svgpathtools.Line):
-          start = (scale*np.real(seg.start), scale*np.imag(seg.start))
-          end = (scale*np.real(seg.end), scale*np.imag(seg.end))
-          line_segs.append([start, end])
-        else:
-          # for now do the same thing as above, but will want to handle
-          # each case differently in the future by checking for these classes: 
-          # svgpathtools.QuadraticBezier, svgpathtools.CubicBezier, 
-          # svgpathtools.Arc
-          print("Got a more complex segment! Skipping it for now", seg)
-    return line_segs
-    
-    
-    
+
+def translate_svg_paths(paths, scale, tol=5):
+  robot_paths = []
+  
+  # Separate each path into the contiguous paths.
+  contiguous_paths = []
+  for path in paths:
+    contiguous_paths += path.contiguous_subpaths
+
+  for path in contiguous_paths: 
+    # List of Line objects in the current path
+    current_path = []
+    for seg in path:
+      if isinstance(seg, svgpathtools.Line):
+        current_path.append(seg)
+      else: # Bezier curves and arcs.
+        current_path += approximate_with_line_segs(seg, tol)
+    # Convert points to tuples and get rid of redundancies
+    current_path_converted = [complex_to_tuple(line.start, scale) for line in current_path]
+    current_path_converted.append(complex_to_tuple(current_path[-1].end, scale))
+    robot_paths.append() 
+        
+  return robot_paths
+
+
+def complex_to_tuple(complex_num, scale):
+  return (np.real(complex_num)*scale, np.imag(complex_num)*scale)
+
+def approximate_with_line_segs(seg, tol):
+  # Potential line approximation.
+  line = svgpathtools.Line(seg.start, seg.end)
+
+  # Check a line segment is within the tolerance at the quartiles
+  for p in [.25, .5, .75]:
+    if np.abs(seg.point(p) - line.point(p)) > tol:
+      left_seg, right_seg = seg.split(.5)
+      return (approximate_with_line_segs(left_seg, tol) + 
+              approximate_with_line_segs(right_seg, tol))
+  return [line]
+
+def approximate_with_line_segs_inner(bez, tol):
+  quartiles = bez.point(.25), bez.point(.5), bez.point(.75)
 
 class Robot:
   def __init__(self, myro_obj=None):
