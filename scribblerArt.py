@@ -50,8 +50,8 @@ class Canvas:
     robot_paths = translate_svg_paths(paths, scaling_factor)
     self.paths = robot_paths
 
-
-def translate_svg_paths(paths, scale, tol=5):
+# TODO: update the default values, take into account units
+def translate_svg_paths(paths, scale, tol=5, min_length=5):
   robot_paths = []
   
   # Separate each path into the contiguous paths.
@@ -66,11 +66,11 @@ def translate_svg_paths(paths, scale, tol=5):
       if isinstance(seg, svgpathtools.Line):
         current_path.append(seg)
       else: # Bezier curves and arcs.
-        current_path += approximate_with_line_segs(seg, tol)
+        current_path += approximate_with_line_segs(seg, tol, min_length)
     # Convert points to tuples and get rid of redundancies
     current_path_converted = [complex_to_tuple(line.start, scale) for line in current_path]
     current_path_converted.append(complex_to_tuple(current_path[-1].end, scale))
-    robot_paths.append() 
+    robot_paths.append(current_path_converted) 
         
   return robot_paths
 
@@ -78,20 +78,21 @@ def translate_svg_paths(paths, scale, tol=5):
 def complex_to_tuple(complex_num, scale):
   return (np.real(complex_num)*scale, np.imag(complex_num)*scale)
 
-def approximate_with_line_segs(seg, tol):
+def approximate_with_line_segs(seg, tol, min_length):
   # Potential line approximation.
   line = svgpathtools.Line(seg.start, seg.end)
 
-  # Check a line segment is within the tolerance at the quartiles
-  for p in [.25, .5, .75]:
-    if np.abs(seg.point(p) - line.point(p)) > tol:
-      left_seg, right_seg = seg.split(.5)
-      return (approximate_with_line_segs(left_seg, tol) + 
-              approximate_with_line_segs(right_seg, tol))
+  # Check if the line segment is already super short
+  if len(line) > min_length:
+    # Check if the line segment is within the tolerance at the quartiles
+    for p in [.25, .5, .75]:
+      if np.abs(seg.point(p) - line.point(p)) > tol:
+        left_seg, right_seg = seg.split(.5)
+        return (approximate_with_line_segs(left_seg, tol) + 
+                approximate_with_line_segs(right_seg, tol))
+  # Return the line if it's already short or sufficiently close to the curve
   return [line]
 
-def approximate_with_line_segs_inner(bez, tol):
-  quartiles = bez.point(.25), bez.point(.5), bez.point(.75)
 
 class Robot:
   def __init__(self, myro_obj=None):
@@ -197,22 +198,27 @@ class Robot:
     self.robot.stop() 
 
   """
-  draw_line_seg - instructs the robot to draw a line from (start_x, start_y) to
-      (end_x, end_y). 
+  draw_contiguous_path - instructs the robot to draw a path connecting all of
+      the given points.
   parameters: 
-      start_x: X-coordinate of first endpoint in line segment to be drawn. 
-      start_y: Y-coordinate of first endpoint in line segment to be drawn.
-      end_x: X-coordinate of second endpoint in the line segment to be drawn.
-      end_y: Y-coordinate of second endpoint in the line segment to be drawn.
+      points: list of points
   """
-  def draw_line_seg(self, start_x, start_y, end_x, end_y): 
+  def draw_contiguous_path(self, points): 
+    if len(points) < 2: 
+      raise ValueError("Can't have a path with fewer than 2 points")
+      # TODO: handle case of drawing points? 
+
     # Get to the starting point without drawing
-    self.pen_up() # TODO: this will likely be redundant so maybe take it out
-    self.go_straight_to_point(start_x, start_y)
-    
-    # Put the pen down and draw the line 
+    self.pen_up() # NOTE: this will likely be redundant so maybe take it out 
+    start_x, start_y = points.pop(0)
+    self.go_straight_to_point(start_x, start_y) 
+
+    # Draw all the subsequent points 
     self.pen_down()
-    self.go_straight_to_point(end_x, end_y)
+    for x, y in points:
+      self.go_straight_to_point(x, y)
+    
+    # Pick pen up when done
     self.pen_up()
 
   """
