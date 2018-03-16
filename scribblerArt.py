@@ -1,8 +1,12 @@
 import myro
 import svg
 import numpy as np
-# parse_path will be useful 
 import svgpathtools
+import requests
+import json
+
+
+SENSOR_URL = "http://192.168.0.26:5000/bno"
 
 DIST_PER_SEC = 2.95 # inches when moving at half speed
 # TODO: further refine this value
@@ -95,16 +99,49 @@ def approximate_with_line_segs(seg, tol, min_length):
 
 
 class Robot:
-  def __init__(self, myro_obj=None):
+  def __init__(self, myro_obj=None, sensor_url):
     # Assume the robot is initially in the bottom left corner of its canvas
     # and facing in the positive y direction (90 degrees)
     self.pos_x = 0.0
     self.pos_y = 0.0
     self.angle = 90.0
-    # The myro object that controls the actual robot! f
+    self.sensor_url = SENSOR_URL
+    calibrated = self.is_sensor_calibrated()
+    while not calibrated: 
+      print("Waiting on sensor calibration...")
+      myro.wait(5) # Wait 5 seconds before checking again.
+      calibrated = self.is_sensor_calibrated()
+      
+    raw_input("Ready to go? When robot is in place hit [Enter] to continue.")
+    # Once the robot is in position, record offset between absolute and relative headings. 
+    abs_heading = json.loads(requests.get(self.sensor_url).content)
+    self.angle_offset = abs_heading - 90
+
+    # The myro object that controls the actual robot!
     if myro_obj is None:
       print("TEST MODE: NO ROBOT GIVEN")
     self.robot = myro_obj
+
+  def get_relative_heading(self):
+    r = requests.get(self.sensor_url)
+    if r.status_code == requests.codes.OK:
+      data = json.loads(r.content)
+      relative_heading = data["heading"] - self.angle_offset
+      self.angle = relative_heading
+      return relative_heading
+    # Right eturns none if can't get the sensor data. May want to modify this behavior. 
+
+  def is_sensor_calibrated(self):
+    r = requests.get(self.sensor_url)
+    if r.status_code != requests.codes.OK:
+      print("Can't get sensor data - check sensor server.")
+      return False
+    data = json.loads(r.content)
+
+    # Check the gyroscope is calibrated and the "system" is calibrated.
+    # If system isn't calibrated - heading values will jump from relative to
+    # absolute as soon as the system calibrates.
+    return (data["calSystem"] > 0) and (data["calGyro"] > 0)
 
   """
   angle_to_point - calculates and returns the angle between the robot's current
@@ -154,31 +191,33 @@ class Robot:
           function is executed.
   """
   def turn_to_angle(self, desired_angle):
+    # Don't really care about amount to turn, just about which direction to turn (CW/CCW).
     amt_to_turn = (desired_angle - self.angle)%360
     if amt_to_turn > 180:
         amt_to_turn -= 360
     print("amount to turn: " + str(amt_to_turn))
-    print("time to turn: " + str(amt_to_turn/ANGLE_PER_SEC))
+    # print("time to turn: " + str(amt_to_turn/ANGLE_PER_SEC))
     turn_vel = .25
     if amt_to_turn < 0:
-      amt_to_turn *= (-1)
+      # amt_to_turn *= (-1) # still necessary for old version of code
       turn_vel *= (-1)
-    self.robot.move(0, .25)
 
-    myro.wait(amt_to_turn/ANGLE_PER_SEC)
-    """
-    i = 0
-    while (i < amt_to_turn/ANGLE_PER_SEC): 
-      # TODO: make the condition a real thing with sensors
-      i += 1
-      myro.wait(1)
-      pass
-    """
+    # Old version - use for comparison
+    # self.robot.move(0, turn_vel)
+    # myro.wait(amt_to_turn/ANGLE_PER_SEC)
+    
+    done_turning = False
+    self.robot.move(0, turn_vel)
+    while not done_turning: 
+      # get the current heading
+      cur_heading = self.get_relative_heading()
+      done_turning = np.abs(cur_heading - desired_angle) < angle_tolerance:
     self.robot.stop()
-
+    self.get_relative_heading() # Get heading one more time in case stopping moved a little"
     # NOTE: don't actually want to assume the angle is correct
     # should use sensor data instead
-    self.angle = desired_angle
+    # self.angle = desired_angle
+
 
   """
   move_forward_distance: Instructs the robot to move forward by the given 
