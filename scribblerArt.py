@@ -14,6 +14,8 @@ DIST_PER_SEC = 2.95 # inches when moving at half speed
 ANGLE_PER_SEC = 23 # in degrees, assumes turning at 1/4 max
 # TODO: this isn't very consistent, so should replace with sensor input
 
+ANGLE_TOLERANCE = 2.0 # Two degrees
+
 class Canvas:
   def __init__(self, svg_file, height=None):
     # assume robot is initially in the bottom left corner of the canvas (0, 0)
@@ -58,10 +60,10 @@ class Canvas:
 def translate_svg_paths(paths, scale, tol=5, min_length=5):
   robot_paths = []
   
-  # Separate each path into the contiguous paths.
+  # Separate each path into the continuous paths.
   contiguous_paths = []
   for path in paths:
-    contiguous_paths += path.contiguous_subpaths
+    contiguous_paths += path.continuous_subpaths()
 
   for path in contiguous_paths: 
     # List of Line objects in the current path
@@ -99,13 +101,13 @@ def approximate_with_line_segs(seg, tol, min_length):
 
 
 class Robot:
-  def __init__(self, myro_obj=None, sensor_url):
+  def __init__(self, myro_obj=None, sensor_url=SENSOR_URL):
     # Assume the robot is initially in the bottom left corner of its canvas
     # and facing in the positive y direction (90 degrees)
     self.pos_x = 0.0
     self.pos_y = 0.0
     self.angle = 90.0
-    self.sensor_url = SENSOR_URL
+    self.sensor_url = sensor_url
     calibrated = self.is_sensor_calibrated()
     while not calibrated: 
       print("Waiting on sensor calibration...")
@@ -114,7 +116,7 @@ class Robot:
       
     raw_input("Ready to go? When robot is in place hit [Enter] to continue.")
     # Once the robot is in position, record offset between absolute and relative headings. 
-    abs_heading = json.loads(requests.get(self.sensor_url).content)
+    abs_heading = json.loads(requests.get(self.sensor_url).content)["heading"]
     self.angle_offset = abs_heading - 90
 
     # The myro object that controls the actual robot!
@@ -141,11 +143,11 @@ class Robot:
     # Check the gyroscope is calibrated and the "system" is calibrated.
     # If system isn't calibrated - heading values will jump from relative to
     # absolute as soon as the system calibrates.
-    return (data["calSystem"] > 0) and (data["calGyro"] > 0)
+    return (data["calSys"] > 0) and (data["calGyro"] > 0)
 
   """
   angle_to_point - calculates and returns the angle between the robot's current
-      posiiton and the given point (next_x, next_y)
+      position and the given point (next_x, next_y)
   parameters: 
       next_x: X-coordinate of point to get angle pointing towards.
       next_y: Y-coordinate of point to get angle pointing towards.
@@ -211,7 +213,7 @@ class Robot:
     while not done_turning: 
       # get the current heading
       cur_heading = self.get_relative_heading()
-      done_turning = np.abs(cur_heading - desired_angle) < angle_tolerance:
+      done_turning = np.abs(cur_heading - desired_angle) < ANGLE_TOLERANCE
     self.robot.stop()
     self.get_relative_heading() # Get heading one more time in case stopping moved a little"
     # NOTE: don't actually want to assume the angle is correct
@@ -234,15 +236,17 @@ class Robot:
       speed *= -1
     self.robot.move(speed, 0)
     myro.wait(secs) 
-    self.robot.stop() 
+    self.robot.stop()
+    self.pos_x = self.pos_x + distance*np.cos(self.angle)
+    self.pos_y = self.pos_y + distance*np.sin(self.angle)
 
   """
-  draw_contiguous_path - instructs the robot to draw a path connecting all of
+  draw_continuous_path - instructs the robot to draw a path connecting all of
       the given points.
   parameters: 
       points: list of points
   """
-  def draw_contiguous_path(self, points): 
+  def draw_continuous_path(self, points): 
     if len(points) < 2: 
       raise ValueError("Can't have a path with fewer than 2 points")
       # TODO: handle case of drawing points? 
