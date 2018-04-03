@@ -1,7 +1,9 @@
 import sys
 import myro
 import scribblerArt
+import logging
 
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 def main():
   # TODO: add validation that it's a number and in a reasonable range

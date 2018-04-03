@@ -4,6 +4,7 @@ import numpy as np
 import svgpathtools
 import requests
 import json
+import logging
 
 
 SENSOR_URL = "http://192.168.1.115:5000/bno"
@@ -14,7 +15,10 @@ DIST_PER_SEC = 2.95 # inches when moving at half speed
 ANGLE_PER_SEC = 28 # 23 # in degrees, assumes turning at 1/4 max
 # TODO: this isn't very consistent, so should replace with sensor input
 
-ANGLE_TOLERANCE = 10.0 # Two degrees
+ANGLE_TOLERANCE = 30.0 # Two degrees
+
+MAX_TURN_VEL = .1
+
 
 class Canvas:
   def __init__(self, svg_file, height=None):
@@ -136,7 +140,7 @@ class Robot:
       relative_heading = data["heading"] - self.angle_offset
       self.angle = relative_heading
       return relative_heading
-    # Right eturns none if can't get the sensor data. May want to modify this behavior. 
+    # Returns none if can't get the sensor data. May want to modify this behavior. 
 
   def is_sensor_calibrated(self):
     r = requests.get(self.sensor_url)
@@ -196,30 +200,38 @@ class Robot:
   parameters:
       desired_angle: Float angle in degrees that robot should be facing after
           function is executed.
+      turn_vel_fn: Function that calculates the turning veocity as a function of
+          angle left to turn.
   """
-  def turn_to_angle(self, desired_angle):
-    # Don't really care about amount to turn, just about which direction to turn (CW/CCW).
-    amt_to_turn = (desired_angle - self.angle)%360
-    if amt_to_turn > 180:
-        amt_to_turn -= 360
-    print("amount to turn: " + str(amt_to_turn))
-    # print("time to turn: " + str(amt_to_turn/ANGLE_PER_SEC))
-    max_turn_vel = .25
-    # TODO: maybe get rid of that? (and make above a magnitude)
-    if amt_to_turn < 0:
-      max_turn_vel *= (-1)
+  def turn_to_angle(self, desired_angle, turn_vel_fn, max_vel):
+    angle_delta = self.calculate_angle_delta(desired_angle)
+    logging.info("amount to turn: " + str(angle_delta))
 
-    cur_heading = self.get_relative_heading()
-    angle_delta = desired_angle - cur_heading
     while not np.abs(angle_delta) < ANGLE_TOLERANCE: 
-      # TODO: add a condition to change turn_vel in cases of overshoot
-      self.robot.move(0, max_turn_vel*float(angle_delta)/180)
-      # get the current heading
-      angle_delta = desired_angle - self.get_relative_heading()
-      
-    self.robot.stop()
-    self.get_relative_heading() # Get heading one more time in case stopping moved a little"
+      turn_vel = turn_vel_fn(angle_delta, max_vel)
+      self.robot.move(0, turn_vel)
+      logging.debug("Heading: " + str(self.angle))
+      logging.debug("Desired: " + str(desired_angle))
+      logging.debug("Angle delta: " + str(angle_delta))
+      logging.debug("Turn Direction: " + str(np.sign(turn_vel)))
+      angle_delta = self.calculate_angle_delta(desired_angle) 
 
+    self.robot.stop()
+
+    # Update heading one more time in case it changed while stopping.
+    self.get_relative_heading()
+
+  """
+  calculate_angle_delta - Returns the angle to turn given the desired angle.
+  """
+  def calculate_angle_delta(self, desired_angle):
+    cur_angle = self.get_relative_heading()
+    # Get positive value of amount to turn.
+    # Adds 360 before % to make negative angles easier to deal with.
+    angle_delta = (desired_angle - cur_angle + 360)%360
+    if angle_delta > 180: 
+      angle_delta -= 360
+    return angle_delta
 
   def turn_to_angle_old(self, desired_angle):
     amt_to_turn = (desired_angle - self.angle)%360
@@ -232,7 +244,6 @@ class Robot:
       amt_to_turn *= (-1) # still necessary for old version of code
       turn_vel *= (-1)
 
-    # Old version - use for comparison
     self.robot.move(0, turn_vel)
     myro.wait(float(amt_to_turn)/ANGLE_PER_SEC)
     self.robot.stop()
@@ -292,7 +303,7 @@ class Robot:
     print("Current position:" + str(self.pos_x) + ", " + str(self.pos_y))
     print("Current heading: " + str(self.angle))
     print("Next angle: " + str(angle))
-    self.turn_to_angle(angle) # TODO: make sure this is correct version!!!
+    self.turn_to_angle(angle, turn_vel_linear, MAX_TURN_VEL) # TODO: make sure this is correct version!!!
     dist = self.distance_to_point(next_x, next_y)
     print("Distance: " + str(dist))
     self.move_forward_distance(dist)
@@ -319,3 +330,12 @@ class Robot:
     print("Lower pen")
 
 
+def turn_vel_linear(angle_delta, max_vel):
+  return 180*float(angle_delta)/180
+
+def turn_vel_sinusoidal(angle_delta, max_vel):
+  vel = max_vel*(1 - np.cos(np.deg2rad(angle_delta)))
+  if angle_delta >= 0:
+    return vel
+  else:
+    return -vel
