@@ -228,7 +228,7 @@ class Robot:
     cur_angle = self.get_relative_heading()
     # Get positive value of amount to turn.
     # Adds 360 before % to make negative angles easier to deal with.
-    angle_delta = (desired_angle - cur_angle + 360)%360
+    angle_delta = (cur_angle - desired_angle + 360)%360
     if angle_delta > 180: 
       angle_delta -= 360
     return angle_delta
