@@ -6,15 +6,15 @@ import requests
 import json
 
 
-SENSOR_URL = "http://192.168.0.26:5000/bno"
+SENSOR_URL = "http://192.168.1.115:5000/bno"
 
 DIST_PER_SEC = 2.95 # inches when moving at half speed
 # TODO: further refine this value
 
-ANGLE_PER_SEC = 23 # in degrees, assumes turning at 1/4 max
+ANGLE_PER_SEC = 28 # 23 # in degrees, assumes turning at 1/4 max
 # TODO: this isn't very consistent, so should replace with sensor input
 
-ANGLE_TOLERANCE = 2.0 # Two degrees
+ANGLE_TOLERANCE = 10.0 # Two degrees
 
 class Canvas:
   def __init__(self, svg_file, height=None):
@@ -42,8 +42,11 @@ class Canvas:
     paths, _, svg_attributes = svgpathtools.svg2paths2(svg_file)
 
     # Get the height and width of the SVG
-    height = float(svg_attributes["height"])
-    width = float(svg_attributes["width"])
+    try:
+      height = float(svg_attributes["height"])
+      width = float(svg_attributes["width"])
+    except KeyError:
+      pass # TODO: should use bounding boxes and such
 
     if self.height:
       scaling_factor = self.height/height
@@ -57,7 +60,7 @@ class Canvas:
     self.paths = robot_paths
 
 # TODO: update the default values, take into account units
-def translate_svg_paths(paths, scale, tol=5, min_length=5):
+def translate_svg_paths(paths, scale, tol=5, min_length=.5):
   robot_paths = []
   
   # Separate each path into the continuous paths.
@@ -74,9 +77,10 @@ def translate_svg_paths(paths, scale, tol=5, min_length=5):
       else: # Bezier curves and arcs.
         current_path += approximate_with_line_segs(seg, tol, min_length)
     # Convert points to tuples and get rid of redundancies
-    current_path_converted = [complex_to_tuple(line.start, scale) for line in current_path]
-    current_path_converted.append(complex_to_tuple(current_path[-1].end, scale))
-    robot_paths.append(current_path_converted) 
+    if current_path:
+      current_path_converted = [complex_to_tuple(line.start, scale) for line in current_path]
+      current_path_converted.append(complex_to_tuple(current_path[-1].end, scale))
+      robot_paths.append(current_path_converted) 
         
   return robot_paths
 
@@ -94,8 +98,8 @@ def approximate_with_line_segs(seg, tol, min_length):
     for p in [.25, .5, .75]:
       if np.abs(seg.point(p) - line.point(p)) > tol:
         left_seg, right_seg = seg.split(.5)
-        return (approximate_with_line_segs(left_seg, tol) + 
-                approximate_with_line_segs(right_seg, tol))
+        return (approximate_with_line_segs(left_seg, tol, min_length) + 
+                approximate_with_line_segs(right_seg, tol, min_length))
   # Return the line if it's already short or sufficiently close to the curve
   return [line]
 
@@ -104,6 +108,7 @@ class Robot:
   def __init__(self, myro_obj=None, sensor_url=SENSOR_URL):
     # Assume the robot is initially in the bottom left corner of its canvas
     # and facing in the positive y direction (90 degrees)
+    print("creating the robot??")
     self.pos_x = 0.0
     self.pos_y = 0.0
     self.angle = 90.0
@@ -166,8 +171,8 @@ class Robot:
         return -90.
       else: # current position is equal to next_x, next_y
         return self.angle  # if the points are the same, return current angle
-    angle_in_rads = np.arctan2(float(next_y - self.pos_y), (next_x - self.pos_x))
-    degs = angle_in_rads * 180 / np.pi
+    degs = np.rad2deg(
+        np.arctan2(float(next_y - self.pos_y), (next_x - self.pos_x)))
     if degs > 180:
       degs = degs - 360
     return degs
@@ -199,27 +204,39 @@ class Robot:
         amt_to_turn -= 360
     print("amount to turn: " + str(amt_to_turn))
     # print("time to turn: " + str(amt_to_turn/ANGLE_PER_SEC))
-    turn_vel = .25
+    max_turn_vel = .25
+    # TODO: maybe get rid of that? (and make above a magnitude)
     if amt_to_turn < 0:
-      # amt_to_turn *= (-1) # still necessary for old version of code
+      max_turn_vel *= (-1)
+
+    cur_heading = self.get_relative_heading()
+    angle_delta = desired_angle - cur_heading
+    while not np.abs(angle_delta) < ANGLE_TOLERANCE: 
+      # TODO: add a condition to change turn_vel in cases of overshoot
+      self.robot.move(0, max_turn_vel*float(angle_delta)/180)
+      # get the current heading
+      angle_delta = desired_angle - self.get_relative_heading()
+      
+    self.robot.stop()
+    self.get_relative_heading() # Get heading one more time in case stopping moved a little"
+
+
+  def turn_to_angle_old(self, desired_angle):
+    amt_to_turn = (desired_angle - self.angle)%360
+    if amt_to_turn > 180:
+        amt_to_turn -= 360
+    print("amount to turn: " + str(amt_to_turn))
+    # print("time to turn: " + str(amt_to_turn/ANGLE_PER_SEC))
+    turn_vel = -.25
+    if amt_to_turn < 0:
+      amt_to_turn *= (-1) # still necessary for old version of code
       turn_vel *= (-1)
 
     # Old version - use for comparison
-    # self.robot.move(0, turn_vel)
-    # myro.wait(amt_to_turn/ANGLE_PER_SEC)
-    
-    done_turning = False
     self.robot.move(0, turn_vel)
-    while not done_turning: 
-      # get the current heading
-      cur_heading = self.get_relative_heading()
-      done_turning = np.abs(cur_heading - desired_angle) < ANGLE_TOLERANCE
+    myro.wait(float(amt_to_turn)/ANGLE_PER_SEC)
     self.robot.stop()
-    self.get_relative_heading() # Get heading one more time in case stopping moved a little"
-    # NOTE: don't actually want to assume the angle is correct
-    # should use sensor data instead
-    # self.angle = desired_angle
-
+    self.angle = desired_angle # Assume robot made it to the correct angle
 
   """
   move_forward_distance: Instructs the robot to move forward by the given 
@@ -229,6 +246,7 @@ class Robot:
   """
   def move_forward_distance(self, distance):
     secs = distance / DIST_PER_SEC
+    print("Heading: " + str(self.angle))
     print("Time to move forward: " + str(secs))
     speed = .5
     if secs < 0:
@@ -237,8 +255,8 @@ class Robot:
     self.robot.move(speed, 0)
     myro.wait(secs) 
     self.robot.stop()
-    self.pos_x = self.pos_x + distance*np.cos(self.angle)
-    self.pos_y = self.pos_y + distance*np.sin(self.angle)
+    self.pos_x = self.pos_x + distance*np.cos(np.deg2rad(self.angle))
+    self.pos_y = self.pos_y + distance*np.sin(np.deg2rad(self.angle))
 
   """
   draw_continuous_path - instructs the robot to draw a path connecting all of
@@ -271,8 +289,10 @@ class Robot:
   """
   def go_straight_to_point(self, next_x, next_y):    
     angle = self.angle_to_point(next_x, next_y)
+    print("Current position:" + str(self.pos_x) + ", " + str(self.pos_y))
+    print("Current heading: " + str(self.angle))
     print("Next angle: " + str(angle))
-    self.turn_to_angle(angle)
+    self.turn_to_angle(angle) # TODO: make sure this is correct version!!!
     dist = self.distance_to_point(next_x, next_y)
     print("Distance: " + str(dist))
     self.move_forward_distance(dist)
