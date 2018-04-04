@@ -125,7 +125,9 @@ class Robot:
       
     raw_input("Ready to go? When robot is in place hit [Enter] to continue.")
     # Once the robot is in position, record offset between absolute and relative headings. 
-    abs_heading = json.loads(requests.get(self.sensor_url).content)["heading"]
+    # Heading value is backwards so subtract from 360 to get true CCW+ orientation. 
+    # TODO: Change this to use quaternions. 
+    abs_heading = 360 - json.loads(requests.get(self.sensor_url).content)["heading"]
     self.angle_offset = abs_heading - 90
 
     # The myro object that controls the actual robot!
@@ -137,7 +139,7 @@ class Robot:
     r = requests.get(self.sensor_url)
     if r.status_code == requests.codes.OK:
       data = json.loads(r.content)
-      relative_heading = data["heading"] - self.angle_offset
+      relative_heading = (360 - data["heading"]) - self.angle_offset
       self.angle = relative_heading
       return relative_heading
     # Returns none if can't get the sensor data. May want to modify this behavior. 
@@ -228,7 +230,7 @@ class Robot:
     cur_angle = self.get_relative_heading()
     # Get positive value of amount to turn.
     # Adds 360 before % to make negative angles easier to deal with.
-    angle_delta = (cur_angle - desired_angle + 360)%360
+    angle_delta = (desired_angle - cur_angle + 360)%360
     if angle_delta > 180: 
       angle_delta -= 360
     return angle_delta
