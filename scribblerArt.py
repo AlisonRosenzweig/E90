@@ -7,7 +7,7 @@ import json
 import logging
 
 
-SENSOR_URL = "http://192.168.1.115:5000/bno"
+PI_URL = "http://192.168.1.115:5000"
 
 DIST_PER_SEC = 2.95 # inches when moving at half speed
 # TODO: further refine this value
@@ -19,6 +19,11 @@ ANGLE_TOLERANCE = 2.0 # In degrees
 
 MAX_TURN_VEL = .2
 
+FORWARD_SPEED = .5
+
+# Servo angles corresponding to the up and down positions of the pen.
+UP_ANGLE = 135
+DOWN_ANGLE = 90
 
 class Canvas:
   def __init__(self, svg_file, height=None):
@@ -44,27 +49,39 @@ class Canvas:
   def load_svg(self, svg_file):
     # Read in the svg file 
     paths, _, svg_attributes = svgpathtools.svg2paths2(svg_file)
+    xmin = float("inf")
+    xmax = -1
+    ymin = float("inf")
+    ymax = -1
+    for path in paths:
+      (x1, x2, y1, y2) = path.bbox()
+      if x1 < xmin:
+        xmin = x1
+      if x2 > xmax:
+        xmax = x2
+      if y1 < ymin:
+        ymin = y1
+      if y2 > ymax:
+        ymax = y2  
 
-    # Get the height and width of the SVG
-    try:
-      height = float(svg_attributes["height"])
-      width = float(svg_attributes["width"])
-    except KeyError:
-      pass # TODO: should use bounding boxes and such
+    xmax -= xmin
+    ymax -= ymin
 
     if self.height:
-      scaling_factor = self.height/height
+      scaling_factor = self.height/ymax
     else:
-      self.height = height
+      self.height = ymax
       scaling_factor = 1.0
-    
-    self.width = scaling_factor*width
 
-    robot_paths = translate_svg_paths(paths, scaling_factor)
+    self.width = scaling_factor*xmax
+
+    # translate the SVG paths into robot paths, xmin and ymin as offsets
+    robot_paths = translate_svg_paths(paths, xmin, ymin, scaling_factor)
     self.paths = robot_paths
 
+
 # TODO: update the default values, take into account units
-def translate_svg_paths(paths, scale, tol=5, min_length=.5):
+def translate_svg_paths(paths, x_off, y_off, scale, tol=5, min_length=.5):
   robot_paths = []
   
   # Separate each path into the continuous paths.
@@ -82,15 +99,15 @@ def translate_svg_paths(paths, scale, tol=5, min_length=.5):
         current_path += approximate_with_line_segs(seg, tol, min_length)
     # Convert points to tuples and get rid of redundancies
     if current_path:
-      current_path_converted = [complex_to_tuple(line.start, scale) for line in current_path]
-      current_path_converted.append(complex_to_tuple(current_path[-1].end, scale))
+      current_path_converted = [complex_to_tuple(line.start, x_off, y_off, scale) for line in current_path]
+      current_path_converted.append(complex_to_tuple(current_path[-1].end, x_off, y_off, scale))
       robot_paths.append(current_path_converted) 
         
   return robot_paths
 
 
-def complex_to_tuple(complex_num, scale):
-  return (np.real(complex_num)*scale, np.imag(complex_num)*scale)
+def complex_to_tuple(complex_num, x_off, y_off, scale):
+  return (np.real(complex_num) - x_off)*scale, (np.imag(complex_num) - y_off)*scale
 
 def approximate_with_line_segs(seg, tol, min_length):
   # Potential line approximation.
@@ -109,14 +126,14 @@ def approximate_with_line_segs(seg, tol, min_length):
 
 
 class Robot:
-  def __init__(self, myro_obj=None, sensor_url=SENSOR_URL):
+  def __init__(self, myro_obj=None, robot_url=PI_URL):
     # Assume the robot is initially in the bottom left corner of its canvas
     # and facing in the positive y direction (90 degrees)
-    print("creating the robot??")
     self.pos_x = 0.0
     self.pos_y = 0.0
     self.angle = 90.0
-    self.sensor_url = sensor_url
+    self.sensor_url = robot_url + "/bno"
+    self.robot_url = robot_url
     calibrated = self.is_sensor_calibrated()
     if not calibrated:
       # Just print once...
@@ -266,7 +283,7 @@ class Robot:
     secs = distance / DIST_PER_SEC
     print("Heading: " + str(self.angle))
     print("Time to move forward: " + str(secs))
-    speed = .5
+    speed = FORWARD_SPEED
     if secs < 0:
       secs *= -1
       speed *= -1
@@ -324,7 +341,7 @@ class Robot:
       behavior.
   """
   def pen_up(self):
-    # TODO: make this actually lift the pen once the servo works
+    self.move_pen(UP_ANGLE)
     print("Lift pen")
   
   """
@@ -333,8 +350,16 @@ class Robot:
       behavior.
   """
   def pen_down(self):
-    # TODO: make this actually lower the pen once the servo works
+    self.move_pen(DOWN_ANGLE)
     print("Lower pen")
+  
+  def move_pen(self, angle):
+    r = requests.get(self.robot_url + "/move_to_" + str(angle)) 
+    if r.status != requests.OK:
+      print("Couldn't connect to server to move pen... :( ")
+      exit()
+    # Sleep for a second to give the servo time to move.
+    time.sleep(1)
 
 
 def turn_vel_linear(angle_delta, max_vel):

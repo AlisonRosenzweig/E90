@@ -1,8 +1,9 @@
 import sys
 import myro
+import scribblerArt
 
 try:
-  myro.init("/dev/rfcomm" + sys.argv[1])
+  robo = scribblerArt.Robot(myro.Scribbler("/dev/rfcomm" + sys.argv[1]))
 except IndexError:
   print("gimme a port number pls")
   exit()
@@ -12,8 +13,4 @@ for i in range(5):
   myro.wait(1)
   print(5 - i)
 
-
-wait_time = 1
-myro.move(.5, 0)
-myro.wait(wait_time)
-myro.move(0, 0)
+robo.move_forward_distance(10)
