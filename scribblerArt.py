@@ -1,10 +1,11 @@
 import myro
-import svg
 import numpy as np
 import svgpathtools
 import requests
 import json
 import logging
+
+import svg_processing as svg
 
 
 PI_URL = "http://192.168.1.115:5000"
@@ -15,7 +16,7 @@ DIST_PER_SEC = 2.95 # inches when moving at half speed
 ANGLE_PER_SEC = 28 # In degrees, assumes turning at 1/4 max
 # TODO: this isn't very consistent, so should replace with sensor input
 
-ANGLE_TOLERANCE = 2.0 # In degrees
+ANGLE_TOLERANCE = .5 # In degrees.
 
 MAX_TURN_VEL = .2
 
@@ -76,53 +77,8 @@ class Canvas:
     self.width = scaling_factor*xmax
 
     # translate the SVG paths into robot paths, xmin and ymin as offsets
-    robot_paths = translate_svg_paths(paths, xmin, ymin, scaling_factor)
+    robot_paths = svg.translate_svg_paths(paths, xmin, ymin, scaling_factor)
     self.paths = robot_paths
-
-
-# TODO: update the default values, take into account units
-def translate_svg_paths(paths, x_off, y_off, scale, tol=5, min_length=.5):
-  robot_paths = []
-  
-  # Separate each path into the continuous paths.
-  contiguous_paths = []
-  for path in paths:
-    contiguous_paths += path.continuous_subpaths()
-
-  for path in contiguous_paths: 
-    # List of Line objects in the current path
-    current_path = []
-    for seg in path:
-      if isinstance(seg, svgpathtools.Line):
-        current_path.append(seg)
-      else: # Bezier curves and arcs.
-        current_path += approximate_with_line_segs(seg, tol, min_length)
-    # Convert points to tuples and get rid of redundancies
-    if current_path:
-      current_path_converted = [complex_to_tuple(line.start, x_off, y_off, scale) for line in current_path]
-      current_path_converted.append(complex_to_tuple(current_path[-1].end, x_off, y_off, scale))
-      robot_paths.append(current_path_converted) 
-        
-  return robot_paths
-
-
-def complex_to_tuple(complex_num, x_off, y_off, scale):
-  return (np.real(complex_num) - x_off)*scale, (np.imag(complex_num) - y_off)*scale
-
-def approximate_with_line_segs(seg, tol, min_length):
-  # Potential line approximation.
-  line = svgpathtools.Line(seg.start, seg.end)
-
-  # Check if the line segment is already super short
-  if len(line) > min_length:
-    # Check if the line segment is within the tolerance at the quartiles
-    for p in [.25, .5, .75]:
-      if np.abs(seg.point(p) - line.point(p)) > tol:
-        left_seg, right_seg = seg.split(.5)
-        return (approximate_with_line_segs(left_seg, tol, min_length) + 
-                approximate_with_line_segs(right_seg, tol, min_length))
-  # Return the line if it's already short or sufficiently close to the curve
-  return [line]
 
 
 class Robot:
