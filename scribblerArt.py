@@ -5,16 +5,10 @@ import requests
 import json
 import logging
 
-import svg_processing as svg
-
-
 PI_URL = "http://192.168.1.115:5000"
 
 DIST_PER_SEC = 2.95 # inches when moving at half speed
 # TODO: further refine this value
-
-ANGLE_PER_SEC = 28 # In degrees, assumes turning at 1/4 max
-# TODO: this isn't very consistent, so should replace with sensor input
 
 ANGLE_TOLERANCE = .5 # In degrees.
 
@@ -25,60 +19,6 @@ FORWARD_SPEED = .5
 # Servo angles corresponding to the up and down positions of the pen.
 UP_ANGLE = 135
 DOWN_ANGLE = 90
-
-class Canvas:
-  def __init__(self, svg_file, height=None):
-    # assume robot is initially in the bottom left corner of the canvas (0, 0)
-    # and is facing up (in the positive y direction)
-    if height:
-      self.height = float(height)
-    else:
-      self.height = None # in this case, will be set by load_svg
-    self.width = None # will be set by load_svg
-    self.width = height 
-    self.segs = None # will be set by load_svg
-    
-    self.load_svg(svg_file)
-
-  def robot_in_bounds(self, robot):
-    if robot.pos_x > self.width or robot.pos_x < 0:
-      return False
-    if robot.pos_y > self.height or robot.pos_y < 0:
-      return False
-    return True
-  
-  def load_svg(self, svg_file):
-    # Read in the svg file 
-    paths, _, svg_attributes = svgpathtools.svg2paths2(svg_file)
-    xmin = float("inf")
-    xmax = -1
-    ymin = float("inf")
-    ymax = -1
-    for path in paths:
-      (x1, x2, y1, y2) = path.bbox()
-      if x1 < xmin:
-        xmin = x1
-      if x2 > xmax:
-        xmax = x2
-      if y1 < ymin:
-        ymin = y1
-      if y2 > ymax:
-        ymax = y2  
-
-    xmax -= xmin
-    ymax -= ymin
-
-    if self.height:
-      scaling_factor = self.height/ymax
-    else:
-      self.height = ymax
-      scaling_factor = 1.0
-
-    self.width = scaling_factor*xmax
-
-    # translate the SVG paths into robot paths, xmin and ymin as offsets
-    robot_paths = svg.translate_svg_paths(paths, xmin, ymin, scaling_factor)
-    self.paths = robot_paths
 
 
 class Robot:
@@ -212,22 +152,6 @@ class Robot:
     if angle_delta > 180: 
       angle_delta -= 360
     return angle_delta
-
-  def turn_to_angle_old(self, desired_angle):
-    amt_to_turn = (desired_angle - self.angle)%360
-    if amt_to_turn > 180:
-        amt_to_turn -= 360
-    print("amount to turn: " + str(amt_to_turn))
-    # print("time to turn: " + str(amt_to_turn/ANGLE_PER_SEC))
-    turn_vel = -.25
-    if amt_to_turn < 0:
-      amt_to_turn *= (-1) # still necessary for old version of code
-      turn_vel *= (-1)
-
-    self.robot.move(0, turn_vel)
-    myro.wait(float(amt_to_turn)/ANGLE_PER_SEC)
-    self.robot.stop()
-    self.angle = desired_angle # Assume robot made it to the correct angle
 
   """
   move_forward_distance: Instructs the robot to move forward by the given 

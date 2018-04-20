@@ -4,6 +4,8 @@ import scribblerArt
 import logging
 import timeout_decorator
 
+import svg_processing as svg
+
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 def main():
@@ -12,10 +14,10 @@ def main():
   height = float(sys.argv[2])
   svg_file = sys.argv[3]
   robots = load_robots(num_robots)
-  canvas = scribblerArt.Canvas(svg_file=svg_file, height=height)
+  robot_paths = svg.load_svg(svg_file=svg_file, height=height)
   
   # have one robot draw the SVG
-  for path in canvas.paths:
+  for path in robot_paths:
     robots[0].draw_continuous_path(path)
     
   
