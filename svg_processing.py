@@ -31,12 +31,11 @@ def load_svg(svg_file, height=None):
   if height:
     scaling_factor = height/ymax
   else:
-    self.height = ymax
     scaling_factor = 1.0
 
   # Translate the SVG paths into robot paths, xmin and ymin as offsets.
   robot_paths = translate_svg_paths(paths, xmin, ymin, scaling_factor)
-  self.paths = robot_paths
+  return robot_paths
 
 
 # TODO: update the default values, take into account units.

@@ -1,6 +1,6 @@
 import sys
 import myro
-import scribblerArt
+import robots
 import logging
 import timeout_decorator
 
@@ -22,7 +22,7 @@ def main():
     
   
 def load_robots(num_robots):
-  robots = []
+  connected_robots = []
   for i in range(num_robots):
     port = raw_input("what port is robot %s connected to? " % i)
     connected = False
@@ -32,8 +32,8 @@ def load_robots(num_robots):
         connected = True
       except timeout_decorator.TimeoutError:
         print "Robot took too long to connect, will try again."
-    robots.append(scribblerArt.Robot(myro_obj))
-  return robots
+    connected_robots.append(robots.Robot(myro_obj))
+  return connected_robots
 
 @timeout_decorator.timeout(10)
 def connect_to_robot(port):

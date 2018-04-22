@@ -1,9 +1,10 @@
 import sys
 import myro
-import scribblerArt
+import robots
 
 try:
-  robo = scribblerArt.Robot(myro.Scribbler("/dev/rfcomm" + sys.argv[1]))
+  robo = robots.Robot(myro.Scribbler("/dev/rfcomm" + sys.argv[1]))
+  print "got robo"
 except IndexError:
   print("gimme a port number pls")
   exit()

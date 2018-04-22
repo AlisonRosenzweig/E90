@@ -4,6 +4,7 @@ import svgpathtools
 import requests
 import json
 import logging
+import time
 
 import math_helpers
 
@@ -12,7 +13,7 @@ PI_URL = "http://192.168.1.115:5000"
 DIST_PER_SEC = 2.95 # inches when moving at half speed
 # TODO: further refine this value
 
-ANGLE_TOLERANCE = .5 # In degrees.
+ANGLE_TOLERANCE = 2 # In degrees.
 
 MAX_TURN_VEL = .2
 
@@ -237,7 +238,7 @@ class Robot:
   
   def move_pen(self, angle):
     r = requests.get(self.robot_url + "/move_to_" + str(angle)) 
-    if r.status != requests.OK:
+    if r.status_code != requests.codes.OK:
       print("Couldn't connect to server to move pen... :( ")
       exit()
     # Sleep for a second to give the servo time to move.
