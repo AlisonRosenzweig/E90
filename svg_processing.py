@@ -52,7 +52,7 @@ parameters:
     min_length: Minimum allowed length of a line segment in inches (when 
         approximating bezier curves)
 """
-def translate_svg_paths(paths, x_off, y_off, scale, tol=.5, min_length=3):
+def translate_svg_paths(paths, x_off, y_off, scale, tol=.5, min_length=2):
   robot_paths = []
   
   # Separate each path into the continuous paths.
@@ -118,3 +118,37 @@ def approximate_with_line_segs(seg, tol, min_length):
                 approximate_with_line_segs(right_seg, tol, min_length))
   # Return the line if it's already short or sufficiently close to the curve.
   return [line]
+
+
+class Polyline:
+  def __init__(self, points):
+    if points[0]==points[-1]:
+      self.is_closed = True
+    else:
+      self.is_closed = False
+
+  """
+  distance_to_endpoint - gives the distance from the given point to the closer
+    of the two endpoints, or to the closest of all of the endpoints if the
+    polyline is a closed shape.
+  """
+  def distance_to_endpoint(self, p):
+    if not self.is_closed:
+      # Just return the distance to the closer endpoint
+      dist_to_start = self.distance_to_point(p, 0)
+      dist_to_end = self.distance_to_point(p, -1)
+      if dist_to_start < dist_to_end:
+        return dist_to_start, 0
+      else
+         return dist_to_end, -1
+    else:
+      dists = [self.distance_to_point(p, i) for i in range(len(self.points))]
+      return min(dists), np.argmin(dists)
+
+  """
+  distance_to_point - gives the distance between given point p and point at
+    index i in the polyline.
+  """
+  def distance_to_point(self, p, i):
+    return np.sqrt((p[0] - self.points[i][0])**2 + (p[1] - self.points[i][1])**2)
+
