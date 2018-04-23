@@ -1,22 +1,18 @@
 import myro
 import numpy as np
-import svgpathtools
-import requests
 import json
 import logging
 import time
+import requests
 
 import math_helpers
+import svgpathtools
 
 PI_URL = "http://192.168.1.115:5000"
 
 DIST_PER_SEC = 2.95 # inches when moving at half speed
-# TODO: further refine this value
-
 ANGLE_TOLERANCE = 2 # In degrees.
-
 MAX_TURN_VEL = .2
-
 FORWARD_SPEED = .5
 
 # Servo angles corresponding to the up and down positions of the pen.
@@ -41,7 +37,8 @@ class Robot:
       calibrated = self.is_sensor_calibrated()
       
     raw_input("Ready to go? When robot is in place hit [Enter] to continue.")
-    # Once the robot is in position, record offset between absolute and relative headings. 
+    # Once the robot is in position, record offset between absolute and relative
+    # headings. 
     # Heading value is backwards so subtract from 360 to get true CCW+ orientation. 
     abs_heading = self.get_absolute_heading()
     self.angle_offset = abs_heading - 90
@@ -60,11 +57,11 @@ class Robot:
     r = requests.get(self.sensor_url)
     if r.status_code == requests.codes.OK:
       data = json.loads(r.content)
-      quat_x, quat_y, quat_z, quat_w = data["quatX"], data["quatY"], data["quatZ"], data["quatW"]
+      (quat_x, quat_y, quat_z, quat_w) = (
+           data["quatX"], data["quatY"], data["quatZ"], data["quatW"])
       x, y, z = math_helpers.quat_to_euler(quat_x, quat_y, quat_z, quat_w)
       return x 
     
-
   def is_sensor_calibrated(self):
     r = requests.get(self.sensor_url)
     if r.status_code != requests.codes.OK:
@@ -210,13 +207,10 @@ class Robot:
     print("Current position:" + str(self.pos_x) + ", " + str(self.pos_y))
     print("Current heading: " + str(self.angle))
     print("Next angle: " + str(angle))
-    self.turn_to_angle(angle, math_helpers.turn_vel_binary, MAX_TURN_VEL) # TODO: make sure this is correct version!!!
+    self.turn_to_angle(angle, math_helpers.turn_vel_binary, MAX_TURN_VEL)
     dist = self.distance_to_point(next_x, next_y)
     print("Distance: " + str(dist))
     self.move_forward_distance(dist)
-    # TODO: replace the position update with sensor stuff
-    self.x = next_x
-    self.y = next_y
 
   """
   pen_up: Instructs robot to lift the pen if pen is not already in the raised

@@ -1,26 +1,40 @@
 import sys
 import myro
-import robots
 import logging
 import timeout_decorator
 
+import drawings
+import robots
 import svg_processing as svg
 
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 def main():
-  # TODO: add validation that it's a number and in a reasonable range
   num_robots = int(sys.argv[1])
+  if num_robots > 1: 
+    print "Sorry, this only works with 1 robot right now :("
+    exit()
   height = float(sys.argv[2])
+  if height <= 0:
+    print "Height must be a positive number."
+    exit()
+  
   svg_file = sys.argv[3]
+  try:
+    drawing = drawings.Drawing(svg.load_svg(svg_file=svg_file, height=height))
+  except(IOError):
+    print "Could not open the SVG file, please check the filename and try again."
+    exit()
+  
   robots = load_robots(num_robots)
-  robot_paths = svg.load_svg(svg_file=svg_file, height=height)
   
-  # have one robot draw the SVG
-  for path in robot_paths:
-    robots[0].draw_continuous_path(path)
-    
-  
+  # NOTE: this will not work with more than one robot - will need to introduce
+  # threading and allow whichever robot finishes first to get assigned a new task.
+  while not drawing.is_done:
+    next_path = drawing.assign_path(robot)
+    robots[0].draw_contiguous_path(next_path)
+
+
 def load_robots(num_robots):
   connected_robots = []
   for i in range(num_robots):
@@ -44,10 +58,6 @@ def draw_square(robot):
   square_1_segs = [(0, 0), (0, 4), (4, 4), (4, 0), (0, 0)]
   square_2_segs = [(2, 6), (2, 10), (6, 10), (6, 6), (2, 6)]
   robot.draw_continuous_path(square_1_segs) 
-
-# TODO: would it be worth it to make a line class segment with a custom sort
-# so that objects are sorted by closeness of either end point to a given point?
-
 
 if __name__ == "__main__":
   main()
