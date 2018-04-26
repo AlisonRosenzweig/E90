@@ -14,4 +14,4 @@ for i in range(5):
   myro.wait(1)
   print(5 - i)
 
-robo.move_forward_distance(10)
+robo.move_forward_distance(6)

@@ -23,13 +23,13 @@ def main():
   try:
     drawing = drawings.Drawing(svg.load_svg(svg_file=svg_file, height=height))
   except(IOError):
-    print "Could not open the SVG file, please check the filename and try again."
+    print "Could not open the SVG file, please check filename and try again."
     exit()
   
   robots = load_robots(num_robots)
   
   # NOTE: this will not work with more than one robot - will need to introduce
-  # threading and allow whichever robot finishes first to get assigned a new task.
+  # threading and allow whichever robot finishes first to grab a new task.
   while not drawing.is_done:
     next_path = drawing.assign_path(robot)
     robots[0].draw_contiguous_path(next_path)
@@ -55,7 +55,7 @@ def connect_to_robot(port):
 
 def draw_square(robot):
   #draw two 4x4 squares, 2 inches apart
-  square_1_segs = [(0, 0), (0, 4), (4, 4), (4, 0), (0, 0)]
+  square_1_segs = [(0, 0), (6, 0), (6, 6), (0, 6), (0, 0)]
   square_2_segs = [(2, 6), (2, 10), (6, 10), (6, 6), (2, 6)]
   robot.draw_continuous_path(square_1_segs) 
 

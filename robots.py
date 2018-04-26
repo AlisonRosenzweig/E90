@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import requests
+from enum import Enum
 
 import math_helpers
 import svgpathtools
@@ -19,6 +20,9 @@ FORWARD_SPEED = .5
 UP_ANGLE = 135
 DOWN_ANGLE = 90
 
+class PenPos(Enum):
+  UP = 1
+  DOWN = 2
 
 class Robot:
   def __init__(self, myro_obj=None, robot_url=PI_URL):
@@ -35,11 +39,13 @@ class Robot:
       print("Waiting on sensor calibration...")
     while not calibrated: 
       calibrated = self.is_sensor_calibrated()
+
+    self.pen_up()
+    self.pen_pos = PenPos.UP
       
     raw_input("Ready to go? When robot is in place hit [Enter] to continue.")
     # Once the robot is in position, record offset between absolute and relative
     # headings. 
-    # Heading value is backwards so subtract from 360 to get true CCW+ orientation. 
     abs_heading = self.get_absolute_heading()
     self.angle_offset = abs_heading - 90
 
@@ -182,10 +188,10 @@ class Robot:
   def draw_continuous_path(self, points): 
     if len(points) < 2: 
       raise ValueError("Can't have a path with fewer than 2 points")
-      # TODO: handle case of drawing points? 
+      # NOTE: This means points can't be drawn.
 
     # Get to the starting point without drawing
-    self.pen_up() # NOTE: this will likely be redundant so maybe take it out 
+    self.pen_up() 
     start_x, start_y = points.pop(0)
     self.go_straight_to_point(start_x, start_y) 
 
@@ -201,14 +207,34 @@ class Robot:
   go_straight_to_point: turns and moves from current position to given position.
       combines calculating angle, turning to that angle, calculating
       distance, and moving by that distance. 
+  parameters:
+      next_x: x-value of point to move to.
+      next_y: y-value of point to move to.
+      min_dist: minimum distance away that the next point has to be to move - if
+	threshold isn't met, just skip that motion/point. Value is in inches.
+        Defaults to an eighth of an inch.
   """
-  def go_straight_to_point(self, next_x, next_y):    
+  def go_straight_to_point(self, next_x, next_y, min_dist=0.125):    
+    # Calculate the distance to move in advance to check against min_dist.
+    dist = self.distance_to_point(next_x, next_y)
+    if dist < min_dist:
+      return
+
     angle = self.angle_to_point(next_x, next_y)
     print("Current position:" + str(self.pos_x) + ", " + str(self.pos_y))
     print("Current heading: " + str(self.angle))
     print("Next angle: " + str(angle))
+    orig_pen_pos = self.pen_pos
+
+    # If the pen is down, pick it up for the turn.
+    if orig_pen_pos == PenPos.DOWN:
+      self.pen_up()
     self.turn_to_angle(angle, math_helpers.turn_vel_binary, MAX_TURN_VEL)
-    dist = self.distance_to_point(next_x, next_y)
+
+    # If the pen was down, put it back now that the turn is done.
+    if orig_pen_pos == PenPos.DOWN:
+      self.pen_down()
+
     print("Distance: " + str(dist))
     self.move_forward_distance(dist)
 
@@ -219,6 +245,7 @@ class Robot:
   """
   def pen_up(self):
     self.move_pen(UP_ANGLE)
+    self.pen_pos = PenPos.UP
     print("Lift pen")
   
   """
@@ -228,8 +255,9 @@ class Robot:
   """
   def pen_down(self):
     self.move_pen(DOWN_ANGLE)
-    print("Lower pen")
-  
+    self.pen_pos = PenPos.DOWN
+    print("Lower pen") 
+
   def move_pen(self, angle):
     r = requests.get(self.robot_url + "/move_to_" + str(angle)) 
     if r.status_code != requests.codes.OK:
