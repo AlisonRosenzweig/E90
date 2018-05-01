@@ -1,7 +1,7 @@
 import svgpathtools
 import numpy as np
 
-def load_svg(svg_file, height=None):
+def load_svg(svg_file, height=None, tol=1.5, min_length=1.5):
   # Read in the svg file. 
   paths, _, svg_attributes = svgpathtools.svg2paths2(svg_file)
 
@@ -34,8 +34,7 @@ def load_svg(svg_file, height=None):
     scaling_factor = 1.0
 
   # Translate the SVG paths into robot paths, xmin and ymin as offsets.
-  robot_paths = translate_svg_paths(paths, xmin, ymin, scaling_factor)
-  return robot_paths
+  return translate_svg_paths(paths, xmin, ymin, scaling_factor, tol=tol, min_length=min_length)
 
 
 """
@@ -51,7 +50,10 @@ parameters:
     min_length: Minimum allowed length of a line segment in inches (when 
         approximating bezier curves)
 """
-def translate_svg_paths(paths, x_off, y_off, scale, tol=.5, min_length=2):
+def translate_svg_paths(paths, x_off, y_off, scale, tol=.5, min_length=1.):
+  tol = tol/scale
+  min_length = min_length/scale
+  
   robot_paths = []
   
   # Separate each path into the continuous paths.
@@ -76,7 +78,7 @@ def translate_svg_paths(paths, x_off, y_off, scale, tol=.5, min_length=2):
         complex_to_tuple(current_path[-1].end, x_off, y_off, scale))
       robot_paths.append(current_path_converted) 
         
-  return Polyline(robot_paths)
+  return [Polyline(path) for path in robot_paths]
 
 
 """
@@ -95,7 +97,6 @@ def complex_to_tuple(complex_num, x_off, y_off, scale):
   return (np.real(complex_num) - x_off)*scale, (np.imag(complex_num) - y_off)*scale
 
 
-# TODO: min length is checked before scaling- should scale while still bezier.
 """
 approximate_with_line_segs - Approximates a bezier curve with striaght line
     segments.
