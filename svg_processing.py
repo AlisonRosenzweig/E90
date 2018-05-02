@@ -1,7 +1,7 @@
 import svgpathtools
 import numpy as np
 
-def load_svg(svg_file, height=None, tol=1.5, min_length=1.5):
+def load_svg(svg_file, height=None, tol=5, min_length=1.5):
   # Read in the svg file. 
   paths, _, svg_attributes = svgpathtools.svg2paths2(svg_file)
 
@@ -51,8 +51,8 @@ parameters:
         approximating bezier curves)
 """
 def translate_svg_paths(paths, x_off, y_off, scale, tol=.5, min_length=1.):
-  tol = tol/scale
-  min_length = min_length/scale
+  #tol = tol/scale
+  #min_length = min_length/scale
   
   robot_paths = []
   

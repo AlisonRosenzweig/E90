@@ -31,8 +31,8 @@ def main():
   # NOTE: this will not work with more than one robot - will need to introduce
   # threading and allow whichever robot finishes first to grab a new task.
   while not drawing.is_done:
-    next_path = drawing.assign_path(robot)
-    robots[0].draw_contiguous_path(next_path)
+    next_path = drawing.assign_path(robots[0])
+    robots[0].draw_continuous_path(next_path)
 
 
 def load_robots(num_robots):

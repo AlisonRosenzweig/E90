@@ -185,7 +185,8 @@ class Robot:
   parameters: 
       points: list of points
   """
-  def draw_continuous_path(self, points): 
+  def draw_continuous_path(self, polyline): 
+    points = polyline.points
     if len(points) < 2: 
       raise ValueError("Can't have a path with fewer than 2 points")
       # NOTE: This means points can't be drawn.
@@ -264,7 +265,7 @@ class Robot:
       print("Couldn't connect to server to move pen... :( ")
       exit()
     # Sleep for a second to give the servo time to move.
-    time.sleep(1)
+    time.sleep(2)
 
 
 
