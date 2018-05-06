@@ -18,7 +18,7 @@ FORWARD_SPEED = .5
 
 # Servo angles corresponding to the up and down positions of the pen.
 UP_ANGLE = 135
-DOWN_ANGLE = 90
+DOWN_ANGLE = 60
 
 class PenPos(Enum):
   UP = 1

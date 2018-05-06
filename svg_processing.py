@@ -144,9 +144,12 @@ class Polyline:
       if dist_to_start < dist_to_end:
         return dist_to_start, 0
       else:
+         self.points.reverse()
          return dist_to_end, -1
     else:
       dists = [self.distance_to_point(p, i) for i in range(len(self.points))]
+      start = np.argmin(dists)
+      self.points = self.points[start:] + self.points[:start]
       return min(dists), np.argmin(dists)
 
   """

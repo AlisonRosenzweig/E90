@@ -49,6 +49,7 @@ def load_robots(num_robots):
     connected_robots.append(robots.Robot(myro_obj))
   return connected_robots
 
+
 @timeout_decorator.timeout(10)
 def connect_to_robot(port):
   return myro.Scribbler("/dev/rfcomm" + port)
